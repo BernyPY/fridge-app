@@ -76,9 +76,11 @@ const MOCK_LOG = [
 const GS_URL = "https://script.google.com/macros/s/AKfycbwP40ykjHVB_RKTG0lmFPuL-Yj2pl_I-l2Mos7WnJXPb9r2wFLih6GeL3PI6JBQxcWyKw/exec";
 
 async function gsGet(action, sheet) {
-  const url = `${GS_URL}?action=${action}${sheet ? "&sheet=" + sheet : ""}`;
-  const res = await fetch(url, {redirect:"follow"});
-  return res.json();
+  const url = GS_URL + "?action=" + action + (sheet ? "&sheet=" + encodeURIComponent(sheet) : "");
+  try {
+    const res = await fetch(url, {redirect:"follow"});
+    return res.json();
+  } catch(e) { console.error("gsGet error", e); return {ok:false, rows:[]}; }
 }
 
 async function gsPost(action, sheet, dataObj) {
@@ -128,29 +130,49 @@ function App() {
   const [fridgeGroups,  setFridgeGroups]  = useStorage("rg3", FRIDGE_GROUPS);
 
   // 資料狀態
-  const [freezerItems, setFreezerItems] = useState([]);
-  const [fridgeItems,  setFridgeItems]  = useState([]);
-  const [trashItems,   setTrashItems]   = useState([]);
-  const [logItems,     setLogItems]     = useState([]);
+  // localStorage 快取工具
+  const lsGet = (key) => { try { const v=localStorage.getItem(key); return v?JSON.parse(v):null; } catch{return null;} };
+  const lsSet = (key,val) => { try { localStorage.setItem(key,JSON.stringify(val)); } catch{} };
 
-  // 首次載入從 Google Sheets 拉資料
+  // 從快取初始化，打開瞬間就顯示上次的資料
+  const [freezerItems, setFreezerItems] = useState(()=>lsGet("cache_freezer")||[]);
+  const [fridgeItems,  setFridgeItems]  = useState(()=>lsGet("cache_fridge")||[]);
+  const [trashItems,   setTrashItems]   = useState(()=>lsGet("cache_trash")||[]);
+  const [logItems,     setLogItems]     = useState(()=>lsGet("cache_log")||[]);
+
+  // 首次載入從 Google Sheets 更新（背景同步）
   useEffect(() => {
-    loadAll();
+    loadMain(); // 先拉冷凍+冷藏（主要資料）
   }, []);
 
-  const loadAll = async () => {
+  const loadMain = async () => {
     setLoading(true);
     try {
-      const res = await gsGet("getAllSheets");
-      if (res.ok) {
-        if (res.data.freezer?.length) setFreezerItems(res.data.freezer.map(r => ({...r, qty: Number(r.qty)||0})));
-        if (res.data.fridge?.length)  setFridgeItems(res.data.fridge.map(r  => ({...r, qty: Number(r.qty)||0})));
-        if (res.data.trash?.length)   setTrashItems(res.data.trash.map(r    => ({...r, trashQty: Number(r.trashQty)||0})));
-        if (res.data.log?.length)     setLogItems(res.data.log.map(r        => ({...r, qty: Number(r.qty)||0})));
-      }
-    } catch(e) { console.error("loadAll error", e); }
+      // 只拉冷凍和冷藏，速度加快
+      const [fzRes, fdRes] = await Promise.all([
+        gsGet("getAll", "freezer"),
+        gsGet("getAll", "fridge"),
+      ]);
+      if (fzRes.ok) { const d=fzRes.rows.map(r=>({...r,qty:Number(r.qty)||0})); setFreezerItems(d); lsSet("cache_freezer",d); }
+      if (fdRes.ok) { const d=fdRes.rows.map(r=>({...r,qty:Number(r.qty)||0})); setFridgeItems(d);  lsSet("cache_fridge",d);  }
+    } catch(e) { console.error("loadMain error", e); }
     setLoading(false);
+    // 背景拉垃圾桶和紀錄表
+    loadSecondary();
   };
+
+  const loadSecondary = async () => {
+    try {
+      const [trRes, lgRes] = await Promise.all([
+        gsGet("getAll", "trash"),
+        gsGet("getAll", "log"),
+      ]);
+      if (trRes.ok) { const d=trRes.rows.map(r=>({...r,trashQty:Number(r.trashQty)||0})); setTrashItems(d); lsSet("cache_trash",d); }
+      if (lgRes.ok) { const d=lgRes.rows.map(r=>({...r,qty:Number(r.qty)||0}));           setLogItems(d);   lsSet("cache_log",d);   }
+    } catch(e) { console.error("loadSecondary error", e); }
+  };
+
+  const loadAll = async () => { await loadMain(); };
 
   const sync = async (fn) => {
     setSyncStatus("syncing");
@@ -192,7 +214,7 @@ function App() {
 
   const removeItem = async (id, sec) => {
     const s = sec || section;
-    setItems(p => p.filter(i => i.id !== id));
+    setItems(p => { const next=p.filter(i=>i.id!==id); lsSet("cache_"+s,next); return next; });
     await sync(() => gsPost("delete", s, {id}));
   };
 
