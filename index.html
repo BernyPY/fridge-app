@@ -83,14 +83,18 @@ async function gsGet(action, sheet) {
 
 async function gsPost(action, sheet, dataObj) {
   let params = "action=" + action + "&sheet=" + encodeURIComponent(sheet);
-  if(dataObj && dataObj.id !== undefined) {
-    params += "&id=" + encodeURIComponent(dataObj.id);
-  }
-  if(dataObj && dataObj.patch !== undefined) {
-    params += "&patch=" + encodeURIComponent(JSON.stringify(dataObj.patch));
-  }
-  if(dataObj && dataObj.id === undefined && dataObj.patch === undefined) {
-    params += "&data=" + encodeURIComponent(JSON.stringify(dataObj));
+  if(dataObj) {
+    if(action === "add") {
+      params += "&data=" + encodeURIComponent(JSON.stringify(dataObj));
+    } else if(action === "update") {
+      const id = dataObj.id !== undefined ? dataObj.id : (dataObj.id || "");
+      const patch = dataObj.patch !== undefined ? dataObj.patch : dataObj;
+      params += "&id=" + encodeURIComponent(id);
+      params += "&patch=" + encodeURIComponent(JSON.stringify(patch));
+    } else if(action === "delete") {
+      const id = dataObj.id !== undefined ? dataObj.id : dataObj;
+      params += "&id=" + encodeURIComponent(id);
+    }
   }
   const url = GS_URL + "?" + params;
   try {
@@ -181,7 +185,7 @@ function App() {
     const sec = logSection || section;
     setItems(p => p.map(i => i.id === id ? { ...i, ...patch } : i));
     await sync(async () => {
-      await gsPost({ action: "update", sheet: sec, id, patch });
+      await gsPost("update", sec, {id, patch});
       if (logAction) await addLog(logName, logAction, logQty, sec, logGroup);
     });
   };
@@ -189,7 +193,7 @@ function App() {
   const removeItem = async (id, sec) => {
     const s = sec || section;
     setItems(p => p.filter(i => i.id !== id));
-    await sync(() => gsPost({ action: "delete", sheet: s, id }));
+    await sync(() => gsPost("delete", s, {id}));
   };
 
   const moveToTrash = async (item, qty, skipLog) => {
@@ -211,7 +215,7 @@ function App() {
     } else {
       setItems(p => p.map(i => i.id === item.id ? { ...i, qty: i.qty - 1 } : i));
       await sync(async () => {
-        await gsPost({ action: "update", sheet: item.section, id: item.id, patch: { qty: item.qty - 1 } });
+        await gsPost("update", item.section, {id:item.id, patch:{qty:item.qty-1}});
         await addLog(item.name, "使用", 1, item.section, item.group);
       });
     }
@@ -224,7 +228,7 @@ function App() {
       await sync(() => gsPost("delete", item.section, {id:item.id}));
     } else {
       setItems(p => p.map(i => i.id === item.id ? { ...i, qty: i.qty - 1 } : i));
-      await sync(() => gsPost({ action: "update", sheet: item.section, id: item.id, patch: { qty: item.qty - 1 } }));
+      await sync(() => gsPost("update", item.section, {id:item.id, patch:{qty:item.qty-1}}));
     }
   };
 
@@ -242,7 +246,7 @@ function App() {
     const existing = allItems.find(i => i.name === t.name && i.group === t.group);
     if (existing) {
       setI(p => p.map(i => i.id === existing.id ? { ...i, qty: i.qty + t.trashQty } : i));
-      await sync(() => gsPost({ action: "update", sheet: t.section, id: existing.id, patch: { qty: existing.qty + t.trashQty } }));
+      await sync(() => gsPost("update", t.section, {id:existing.id, patch:{qty:existing.qty+t.trashQty}}));
     } else {
       const restored = { id: gid(), name: t.name, group: t.group, putDate: t.putDate || todayStr(), expDate: t.expDate || "", qty: t.trashQty, section: t.section, note: t.note || "" };
       setI(p => [...p, restored]);
