@@ -77,17 +77,26 @@ const GS_URL = "https://script.google.com/macros/s/AKfycbwP40ykjHVB_RKTG0lmFPuL-
 
 async function gsGet(action, sheet) {
   const url = `${GS_URL}?action=${action}${sheet ? "&sheet=" + sheet : ""}`;
-  const res = await fetch(url);
+  const res = await fetch(url, {redirect:"follow"});
   return res.json();
 }
 
-async function gsPost(body) {
-  const res = await fetch(GS_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return res.json();
+async function gsPost(action, sheet, dataObj) {
+  let params = "action=" + action + "&sheet=" + encodeURIComponent(sheet);
+  if(dataObj && dataObj.id !== undefined) {
+    params += "&id=" + encodeURIComponent(dataObj.id);
+  }
+  if(dataObj && dataObj.patch !== undefined) {
+    params += "&patch=" + encodeURIComponent(JSON.stringify(dataObj.patch));
+  }
+  if(dataObj && dataObj.id === undefined && dataObj.patch === undefined) {
+    params += "&data=" + encodeURIComponent(JSON.stringify(dataObj));
+  }
+  const url = GS_URL + "?" + params;
+  try {
+    const res = await fetch(url, {redirect:"follow"});
+    return res.json();
+  } catch(e) { console.error("gsPost error", e); return {ok:false}; }
 }
 
 function useStorage(key, seed) {
@@ -156,14 +165,14 @@ function App() {
   const addLog = async (name, action, qty, sec, group) => {
     const entry = { id: gid(), time: nowStr(), name, action, qty, section: sec, group };
     setLogItems(p => [...p, entry]);
-    await gsPost({ action: "add", sheet: "log", data: entry });
+    await gsPost("add", "log", entry);
   };
 
   const addItem = async (item) => {
     const newItem = { ...item, id: gid() };
     setItems(p => [...p, newItem]);
     await sync(async () => {
-      await gsPost({ action: "add", sheet: item.section, data: newItem });
+      await gsPost("add", item.section, newItem);
       await addLog(item.name, "加入", item.qty, item.section, item.group);
     });
   };
@@ -187,7 +196,7 @@ function App() {
     const entry = { ...item, trashDate: todayStr(), trashQty: qty, trashId: gid() };
     setTrashItems(p => [...p, entry]);
     await sync(async () => {
-      await gsPost({ action: "add", sheet: "trash", data: entry });
+      await gsPost("add", "trash", entry);
       if (!skipLog) await addLog(item.name, "丟掉", qty, item.section, item.group);
     });
   };
@@ -196,7 +205,7 @@ function App() {
     if (item.qty <= 1) {
       setItems(p => p.filter(i => i.id !== item.id));
       await sync(async () => {
-        await gsPost({ action: "delete", sheet: item.section, id: item.id });
+        await gsPost("delete", item.section, {id:item.id});
         await addLog(item.name, "使用", 1, item.section, item.group);
       });
     } else {
@@ -212,7 +221,7 @@ function App() {
     await moveToTrash(item, 1);
     if (item.qty <= 1) {
       setItems(p => p.filter(i => i.id !== item.id));
-      await sync(() => gsPost({ action: "delete", sheet: item.section, id: item.id }));
+      await sync(() => gsPost("delete", item.section, {id:item.id}));
     } else {
       setItems(p => p.map(i => i.id === item.id ? { ...i, qty: i.qty - 1 } : i));
       await sync(() => gsPost({ action: "update", sheet: item.section, id: item.id, patch: { qty: item.qty - 1 } }));
@@ -222,7 +231,7 @@ function App() {
   const handleTrashAll = async (item) => {
     await moveToTrash(item, item.qty);
     setItems(p => p.filter(i => i.id !== item.id));
-    await sync(() => gsPost({ action: "delete", sheet: item.section, id: item.id }));
+    await sync(() => gsPost("delete", item.section, {id:item.id}));
   };
 
   const handleUndoTrash = async (trashId) => {
@@ -237,11 +246,11 @@ function App() {
     } else {
       const restored = { id: gid(), name: t.name, group: t.group, putDate: t.putDate || todayStr(), expDate: t.expDate || "", qty: t.trashQty, section: t.section, note: t.note || "" };
       setI(p => [...p, restored]);
-      await sync(() => gsPost({ action: "add", sheet: t.section, data: restored }));
+      await sync(() => gsPost("add", t.section, restored));
     }
     setTrashItems(p => p.filter(x => x.trashId !== trashId));
     await sync(async () => {
-      await gsPost({ action: "delete", sheet: "trash", id: trashId });
+      await gsPost("delete", "trash", {id:trashId});
       await addLog(t.name, "返回冰箱", t.trashQty, t.section, t.group);
     });
   };
