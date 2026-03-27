@@ -73,7 +73,7 @@ const MOCK_LOG = [
 ];
 
 /* ═══════════════ GOOGLE SHEETS API ═══════════════ */
-const GS_URL = "https://script.google.com/macros/s/AKfycbyDNP0g7ClV9MM_tjlkx6XrrE2PgsiBwleD_xkOxcA1fvBRRK4AJbshD4kmwisf_8X9uA/exec";
+const GS_URL = "https://script.google.com/macros/s/AKfycbwP40ykjHVB_RKTG0lmFPuL-Yj2pl_I-l2Mos7WnJXPb9r2wFLih6GeL3PI6JBQxcWyKw/exec";
 
 async function gsGet(action, sheet) {
   const url = `${GS_URL}?action=${action}${sheet ? "&sheet=" + sheet : ""}`;
