@@ -128,10 +128,10 @@ function App() {
   const [fridgeGroups,  setFridgeGroups]  = useStorage("rg3", FRIDGE_GROUPS);
 
   // 資料狀態
-  const [freezerItems, setFreezerItems] = useState(MOCK_FREEZER);
-  const [fridgeItems,  setFridgeItems]  = useState(MOCK_FRIDGE);
-  const [trashItems,   setTrashItems]   = useState(MOCK_TRASH);
-  const [logItems,     setLogItems]     = useState(MOCK_LOG);
+  const [freezerItems, setFreezerItems] = useState([]);
+  const [fridgeItems,  setFridgeItems]  = useState([]);
+  const [trashItems,   setTrashItems]   = useState([]);
+  const [logItems,     setLogItems]     = useState([]);
 
   // 首次載入從 Google Sheets 拉資料
   useEffect(() => {
