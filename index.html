@@ -194,7 +194,11 @@ function App() {
     } catch(e) { console.error("loadSecondary error", e); }
   };
 
-  const loadAll = async () => { await loadMain(); };
+  const loadAll = async () => {
+    // 清除所有本地快取
+    ["cache_freezer","cache_fridge","cache_trash","cache_log","cache_fg","cache_rg"].forEach(k=>localStorage.removeItem(k));
+    await loadMain();
+  };
 
   const sync = async (fn) => {
     setSyncStatus("syncing");
