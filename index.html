@@ -126,8 +126,8 @@ function App() {
   const [syncStatus, setSyncStatus] = useState(""); // "", "syncing", "ok", "error"
 
   // Groups 從 Sheets 讀取，localStorage 快取
-  const [freezerGroups, setFreezerGroupsRaw] = useState(()=>lsGet("cache_fg")||FREEZER_GROUPS);
-  const [fridgeGroups,  setFridgeGroupsRaw]  = useState(()=>lsGet("cache_rg")||FRIDGE_GROUPS);
+  const [freezerGroups, setFreezerGroupsRaw] = useState(()=>{ try{const v=localStorage.getItem("cache_fg");return v?JSON.parse(v):FREEZER_GROUPS;}catch{return FREEZER_GROUPS;} });
+  const [fridgeGroups,  setFridgeGroupsRaw]  = useState(()=>{ try{const v=localStorage.getItem("cache_rg");return v?JSON.parse(v):FRIDGE_GROUPS; }catch{return FRIDGE_GROUPS;} });
 
   const setFreezerGroups = (updater) => {
     setFreezerGroupsRaw(prev => {
