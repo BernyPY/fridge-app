@@ -125,9 +125,29 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState(""); // "", "syncing", "ok", "error"
 
-  // Groups 仍用 localStorage（使用者個人設定）
-  const [freezerGroups, setFreezerGroups] = useStorage("fg3", FREEZER_GROUPS);
-  const [fridgeGroups,  setFridgeGroups]  = useStorage("rg3", FRIDGE_GROUPS);
+  // Groups 從 Sheets 讀取，localStorage 快取
+  const [freezerGroups, setFreezerGroupsRaw] = useState(()=>lsGet("cache_fg")||FREEZER_GROUPS);
+  const [fridgeGroups,  setFridgeGroupsRaw]  = useState(()=>lsGet("cache_rg")||FRIDGE_GROUPS);
+
+  const setFreezerGroups = (updater) => {
+    setFreezerGroupsRaw(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      lsSet("cache_fg", next);
+      gsGet("setGroups", "freezer_groups") // fire and forget pattern below
+      gsPost("setGroups", "freezer_groups", null);
+      // use dedicated call
+      fetch(GS_URL + "?action=setGroups&sheet=freezer_groups&groups=" + encodeURIComponent(JSON.stringify(next)), {redirect:"follow"}).catch(()=>{});
+      return next;
+    });
+  };
+  const setFridgeGroups = (updater) => {
+    setFridgeGroupsRaw(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      lsSet("cache_rg", next);
+      fetch(GS_URL + "?action=setGroups&sheet=fridge_groups&groups=" + encodeURIComponent(JSON.stringify(next)), {redirect:"follow"}).catch(()=>{});
+      return next;
+    });
+  };
 
   // 資料狀態
   // localStorage 快取工具
@@ -148,16 +168,18 @@ function App() {
   const loadMain = async () => {
     setLoading(true);
     try {
-      // 只拉冷凍和冷藏，速度加快
-      const [fzRes, fdRes] = await Promise.all([
+      const [fzRes, fdRes, fgRes, rgRes] = await Promise.all([
         gsGet("getAll", "freezer"),
         gsGet("getAll", "fridge"),
+        gsGet("getGroups", "freezer_groups"),
+        gsGet("getGroups", "fridge_groups"),
       ]);
       if (fzRes.ok) { const d=fzRes.rows.map(r=>({...r,qty:Number(r.qty)||0})); setFreezerItems(d); lsSet("cache_freezer",d); }
       if (fdRes.ok) { const d=fdRes.rows.map(r=>({...r,qty:Number(r.qty)||0})); setFridgeItems(d);  lsSet("cache_fridge",d);  }
+      if (fgRes.ok && fgRes.groups?.length) { setFreezerGroupsRaw(fgRes.groups); lsSet("cache_fg", fgRes.groups); }
+      if (rgRes.ok && rgRes.groups?.length) { setFridgeGroupsRaw(rgRes.groups);  lsSet("cache_rg", rgRes.groups); }
     } catch(e) { console.error("loadMain error", e); }
     setLoading(false);
-    // 背景拉垃圾桶和紀錄表
     loadSecondary();
   };
 
